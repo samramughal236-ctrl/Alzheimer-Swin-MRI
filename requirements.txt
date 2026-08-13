@@ -1,0 +1,12 @@
+torch==2.13.0+cpu
+torchvision==0.28.0+cpu
+timm==1.60.0
+transformers==5.14.1
+numpy
+pandas
+matplotlib
+scikit-learn
+opencv-python
+Pillow
+tqdm
+streamlit
