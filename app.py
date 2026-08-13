@@ -4,7 +4,6 @@ import timm
 from PIL import Image
 from torchvision import transforms
 import torch.nn.functional as F
-import os
 
 # ==========================================
 # PAGE CONFIG
@@ -23,7 +22,10 @@ st.write("Swin Transformer-based MRI Dementia Classification")
 # SETTINGS
 # ==========================================
 
-MODEL_PATH = "best_model.pth"
+MODEL_URL = (
+    "https://huggingface.co/samraAman/alzheimer-swin-model/"
+    "resolve/main/best_model.pth"
+)
 
 CLASSES = [
     "MildDemented",
@@ -49,8 +51,8 @@ def load_model():
         num_classes=4
     )
 
-    checkpoint = torch.load(
-        MODEL_PATH,
+    checkpoint = torch.hub.load_state_dict_from_url(
+        MODEL_URL,
         map_location=device
     )
 
@@ -66,21 +68,19 @@ def load_model():
 
 
 # ==========================================
-# LOAD MODEL
+# MODEL
 # ==========================================
 
-if not os.path.exists(MODEL_PATH):
+try:
+    with st.spinner("Loading Swin Transformer model..."):
+        model = load_model()
 
-    st.error(
-        "❌ best_model.pth not found. "
-        "Please place best_model.pth in the same folder as app.py."
-    )
+    st.success("✅ Swin Transformer model loaded successfully")
 
+except Exception as e:
+    st.error("❌ Model loading failed")
+    st.exception(e)
     st.stop()
-
-model = load_model()
-
-st.success("✅ Swin Transformer model loaded successfully")
 
 st.write("Device:", device)
 
@@ -136,13 +136,8 @@ if uploaded_file is not None:
                 dim=1
             )
 
-        predicted_class = CLASSES[
-            predicted.item()
-        ]
-
-        confidence_value = (
-            confidence.item() * 100
-        )
+        predicted_class = CLASSES[predicted.item()]
+        confidence_value = confidence.item() * 100
 
         st.success(
             f"Prediction: {predicted_class}"
@@ -153,7 +148,7 @@ if uploaded_file is not None:
         )
 
         # ==================================
-        # ALL CLASS PROBABILITIES
+        # CLASS PROBABILITIES
         # ==================================
 
         st.subheader("Class Probabilities")
@@ -163,9 +158,10 @@ if uploaded_file is not None:
             probabilities[0]
         ):
 
+            percentage = probability.item() * 100
+
             st.write(
-                f"{class_name}: "
-                f"{probability.item() * 100:.2f}%"
+                f"{class_name}: {percentage:.2f}%"
             )
 
             st.progress(
