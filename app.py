@@ -4,6 +4,7 @@ import timm
 from PIL import Image
 from torchvision import transforms
 import torch.nn.functional as F
+import os
 
 # ==========================================
 # PAGE CONFIG
@@ -27,6 +28,8 @@ MODEL_URL = (
     "resolve/main/best_model.pth"
 )
 
+MODEL_PATH = "/tmp/best_model.pth"
+
 CLASSES = [
     "MildDemented",
     "ModerateDemented",
@@ -39,11 +42,31 @@ device = torch.device(
 )
 
 # ==========================================
+# DOWNLOAD MODEL
+# ==========================================
+
+def download_model():
+
+    if not os.path.exists(MODEL_PATH):
+
+        with st.spinner("Downloading Swin Transformer model..."):
+
+            torch.hub.download_url_to_file(
+                MODEL_URL,
+                MODEL_PATH
+            )
+
+    return MODEL_PATH
+
+
+# ==========================================
 # LOAD MODEL
 # ==========================================
 
 @st.cache_resource
 def load_model():
+
+    model_path = download_model()
 
     model = timm.create_model(
         "swin_tiny_patch4_window7_224",
@@ -51,8 +74,8 @@ def load_model():
         num_classes=4
     )
 
-    checkpoint = torch.hub.load_state_dict_from_url(
-        MODEL_URL,
+    checkpoint = torch.load(
+        model_path,
         map_location=device
     )
 
@@ -68,23 +91,6 @@ def load_model():
 
 
 # ==========================================
-# MODEL
-# ==========================================
-
-try:
-    with st.spinner("Loading Swin Transformer model..."):
-        model = load_model()
-
-    st.success("✅ Swin Transformer model loaded successfully")
-
-except Exception as e:
-    st.error("❌ Model loading failed")
-    st.exception(e)
-    st.stop()
-
-st.write("Device:", device)
-
-# ==========================================
 # IMAGE PREPROCESSING
 # ==========================================
 
@@ -92,6 +98,7 @@ transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor()
 ])
+
 
 # ==========================================
 # IMAGE UPLOAD
@@ -101,6 +108,7 @@ uploaded_file = st.file_uploader(
     "Upload an MRI image",
     type=["jpg", "jpeg", "png"]
 )
+
 
 # ==========================================
 # PREDICTION
@@ -118,52 +126,83 @@ if uploaded_file is not None:
 
     if st.button("🔍 Predict"):
 
-        image_tensor = transform(image)
-        image_tensor = image_tensor.unsqueeze(0)
-        image_tensor = image_tensor.to(device)
+        try:
 
-        with torch.no_grad():
+            with st.spinner("Loading Swin Transformer model..."):
+                model = load_model()
 
-            output = model(image_tensor)
-
-            probabilities = F.softmax(
-                output,
-                dim=1
+            st.success(
+                "✅ Swin Transformer model loaded successfully"
             )
 
-            confidence, predicted = torch.max(
-                probabilities,
-                dim=1
+            image_tensor = transform(image)
+
+            image_tensor = image_tensor.unsqueeze(0)
+
+            image_tensor = image_tensor.to(device)
+
+            with torch.no_grad():
+
+                output = model(image_tensor)
+
+                probabilities = F.softmax(
+                    output,
+                    dim=1
+                )
+
+                confidence, predicted = torch.max(
+                    probabilities,
+                    dim=1
+                )
+
+            predicted_class = CLASSES[
+                predicted.item()
+            ]
+
+            confidence_value = (
+                confidence.item() * 100
             )
 
-        predicted_class = CLASSES[predicted.item()]
-        confidence_value = confidence.item() * 100
+            # ==================================
+            # RESULT
+            # ==================================
 
-        st.success(
-            f"Prediction: {predicted_class}"
-        )
-
-        st.info(
-            f"Confidence: {confidence_value:.2f}%"
-        )
-
-        # ==================================
-        # CLASS PROBABILITIES
-        # ==================================
-
-        st.subheader("Class Probabilities")
-
-        for class_name, probability in zip(
-            CLASSES,
-            probabilities[0]
-        ):
-
-            percentage = probability.item() * 100
-
-            st.write(
-                f"{class_name}: {percentage:.2f}%"
+            st.success(
+                f"Prediction: {predicted_class}"
             )
 
-            st.progress(
-                float(probability.item())
+            st.info(
+                f"Confidence: {confidence_value:.2f}%"
             )
+
+            # ==================================
+            # CLASS PROBABILITIES
+            # ==================================
+
+            st.subheader("Class Probabilities")
+
+            for class_name, probability in zip(
+                CLASSES,
+                probabilities[0]
+            ):
+
+                percentage = (
+                    probability.item() * 100
+                )
+
+                st.write(
+                    f"{class_name}: "
+                    f"{percentage:.2f}%"
+                )
+
+                st.progress(
+                    float(probability.item())
+                )
+
+            st.write("Device:", device)
+
+        except Exception as e:
+
+            st.error("❌ Prediction failed")
+
+            st.exception(e)
